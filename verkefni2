@@ -1,0 +1,1310 @@
+s.boot;
+s.plotTree;
+s.meter;
+ServerOptions;
+s.options.numAudioBusChannels;
+s.options.numControlBusChannels;
+s.options.numOutputBusChannels;
+s.options.numInputBusChannels;
+s.options.numOutputBusChannels = 8;
+s.options.numInputBusChannels  = 8;
+s.reboot;
++
+(
+////groups/////
+(
+~src_grp    = Group.new;
+~delay_grp  = Group.after(~src_grp);
+~reverb_grp = Group.after(~delay_grp);
+);
+
+//////busse//////
+(
+s.newBusAllocators;
+~reverb_bus = Bus.audio(s,2);
+~delay_bus  = Bus.audio(s,2);
+);
+)
+
+//////////////samples
+(
+(
+~sound_array = [
+
+"/Users/orlygurarnalds/Desktop/Orlygur_Verkefni2_SC/samples/fft drone.wav",
+
+"/Users/orlygurarnalds/Desktop/Orlygur_Verkefni2_SC/samples/au drone.wav",
+
+"/Users/orlygurarnalds/Desktop/Orlygur_Verkefni2_SC/samples/TROMMUSOUND.wav",
+
+"/Users/orlygurarnalds/Desktop/Orlygur_Verkefni2_SC/samples/ben2.wav",
+
+"/Users/orlygurarnalds/Desktop/Orlygur_Verkefni2_SC/samples/ben1.wav"
+
+];
+);
+(
+~buffer_array = Array.new;
+
+~sound_array.size.do({arg i;
+	i.postln;
+	~buffeer_array = ~buffer_array.add( Buffer.read(s, ~sound_array[i]));
+});
+);
+
+)
+
+
+/////////////////INSTRUMENTS/////////////////
+
+(
+(
+SynthDef("playbuf",{
+	arg outbus = 0, bufnum = 0, rate = 5, trigger = 1, startPos = 0.2, loop = 0, sustain = 1, amp = 0.5, pan = 0.0, attack = 0.01, rel = 0.1,fFreq= 50,t_trig = 1,reverb_out = 1, delay_out =2, verb =0,delay =0, spread = 1;
+
+	var env, sig,fEnv,filter,lfo,lfoRate,delaySend,verbSend,filter2;
+
+	env = EnvGen.kr(Env.linen(attack, sustain, rel),t_trig, doneAction: 2);
+
+	sig = Splay.ar( PlayBuf.ar(2, bufnum, BufRateScale.kr(bufnum)*rate, trigger, BufFrames.kr(bufnum)*startPos, loop) * env * amp,spread,amp,pan );
+	fEnv = EnvGen.ar(Env([fFreq,18000],[rel]),t_trig,doneAction:0);
+	lfoRate = SinOsc.ar(2).exprange(0.2,20);
+	lfo = LFNoise1.ar(lfoRate).exprange(100,18000);
+	filter = RLPF.ar(sig,fEnv, 0.3);
+	filter2 = RLPF.ar(filter,lfo, 0.3);
+	verbSend = filter2*verb;
+	delaySend = filter2*delay;
+	Out.ar(reverb_out, verbSend);
+	Out.ar(delay_out, delaySend);
+
+	Out.ar(outbus, filter2)
+
+}).add;
+);
+
+(
+SynthDef("playbuf2",{
+	arg outbus = 0, bufnum = 0, rate = 5, trigger = 1, startPos = 0.2, loop = 0, sustain = 1, amp = 0.5, pan = 0.0, attack = 0.01, rel = 0.1,fFreq= 50,t_trig = 1,reverb_out = 1, delay_out =2, verb =0,delay =0,lfoMin=0.01,lfoMax=0.01, spread = 1,rangeMin=0.02,rangeMax=0.2;
+
+	var env, sig,fEnv,filter,lfo,lfoRate,delaySend,verbSend,filter2;
+
+	env = EnvGen.kr(Env.linen(attack, sustain, rel),t_trig, doneAction: 2);
+    lfoRate = SinOsc.ar(0.2).range(rangeMin,rangeMax);
+	lfo = LFNoise1.ar(lfoRate).range(lfoMin,lfoMax);
+	sig = Splay.ar( PlayBuf.ar(2, bufnum, BufRateScale.kr(bufnum)*rate+lfo, trigger, BufFrames.kr(bufnum)*startPos, loop) * env * amp,spread,amp,pan );
+	verbSend = sig*verb;
+	delaySend = sig*delay;
+	Out.ar(reverb_out, verbSend);
+	Out.ar(delay_out, delaySend);
+
+	Out.ar(outbus, sig)
+
+}).add;
+);
+
+
+(
+(
+SynthDef.new("chord", {
+	arg freq = 500, t_trig = 1, amp=0.3, width = 0.1, pos = 0, rel = 0.2, atk = 0, fFreq = 18000,  rate = 0.5, fRel = 0.1, fAtk = 0, verb=0, delay=0, out=0, delay_out=1, reverb_out=2;
+
+	var sig,pulse, mod, env, modEnv,lpFilter, fEnv,lfo,lfo2, hpFilter,lfoRate,verbSend,delaySend;
+	env = EnvGen.ar(Env([0,1,0],[atk,rel]),t_trig, doneAction:2);
+	pulse = Pulse.ar(freq,width) * env * amp;
+	lfoRate = SinOsc.ar(2).exprange(0.2,20);
+	lfo = LFNoise2.ar(lfoRate).exprange(200,18000);
+	lfo2 = LFNoise2.ar(lfoRate).exprange(30,200);
+	fEnv = EnvGen.ar(Env([fFreq,lfo2],[fRel]),t_trig, doneAction:0);
+	lpFilter = RLPF.ar(pulse,lfo, 0.4);
+	hpFilter = RHPF.ar(lpFilter,fEnv, 0.4);
+	sig = Pan2.ar(hpFilter,pos);
+	verbSend = sig*verb;
+	delaySend = sig*delay;
+	Out.ar(reverb_out, verbSend);
+	Out.ar(delay_out, delaySend);
+	Out.ar(out, sig);
+}).add;
+);
+
+
+(
+SynthDef.new("fm", {
+	arg freq = 500, mRatio=5, cRatio=3,carHZ = 500, modHZ = 20, modAmp=200,
+	t_trig = 1, amp=0.3, pos = 0, rel = 1, atk = 0.5, fFreq = 20,
+	index = 1, iScale = 1, detune = 3, rate = 0.5, fRel = 0.01;
+
+	var car, mod, env, modEnv,filter, fEnv, verb;
+	modEnv = EnvGen.ar(
+		Env([index,index * iScale, index],[atk,rel]),t_trig, doneAction: 0);
+	env = EnvGen.ar(Env([0,1,0],[atk,rel]),t_trig, doneAction:2);
+	mod = SinOsc.ar(freq*mRatio, mul:freq * mRatio * modEnv) * modEnv;
+	car = SinOsc.ar(freq*cRatio + mod) * env * amp;
+	fEnv = EnvGen.ar(Env([20000,fFreq],[rel/2]),t_trig, doneAction:0);
+	filter = RLPF.ar(car,fEnv, 0.5);
+	car = Pan2.ar(car,pos);
+	Out.ar(0, car);
+}).add
+);
+
+
+
+(
+SynthDef("snare", {
+	| freq =200, t_trig = 1,out = 0, delay_out = 1, reverb_out = 2,   atk = 0, rel = 1, amp = 0.6, hiF = 20000,mRatio=5, cRatio=0.5,carHZ = 500, modHZ = 20, modAmp=200, pan=0, noiseAmp = 0.4,toneAmp = 0.2, cutoff = 200, res = 1, verb = 0.5, delay = 0.5|
+
+	var tone, signal,  ampEnv, pitchEnv, filter, env, noise, mod,car,modEnv, filterEnv, verbSend, delaySend;
+
+	env = EnvGen.kr(Env.perc(atk, rel, amp),     gate: t_trig,doneAction: 2);
+
+	pitchEnv = EnvGen.kr(((Env.perc(atk, rel/2)).range(freq, freq*5)),gate: t_trig);
+	modEnv = EnvGen.kr(Env.perc(atk, rel/4, amp),     gate: t_trig,doneAction: 0);
+    mod = SinOsc.ar(freq*mRatio, mul:freq * mRatio);
+	car = SinOsc.ar(freq*cRatio + mod) * modEnv * toneAmp;
+	noise = WhiteNoise.ar(noiseAmp)*env;
+	filter = RHPF.ar(noise,cutoff,res);
+	signal = Pan2.ar(filter+car,pan)*amp;
+	verbSend = signal*verb;
+	delaySend = signal*delay;
+	Out.ar(reverb_out, verbSend);
+	Out.ar(delay_out, delaySend);
+	Out.ar(out, signal);
+}).add;
+);
+
+
+(
+SynthDef("hat", {
+	| freq = 100, t_trig = 1,out = 0, atk = 0, rel = 0.1, amp = 0.6, cutoff = 20000, res = 0.2, hiF = 20000, pan = 0 |
+
+	var tone, signal,  ampEnv, pitchEnv, filter, env, noise, sig,modRate,mod;
+
+	env = EnvGen.kr(Env.perc(atk, rel, amp),     gate: t_trig,doneAction: 2);
+	noise = WhiteNoise.ar(amp)*env;
+	filter = BPF.ar(noise,cutoff,res);
+	sig = Pan2.ar(filter,pan);
+	Out.ar(out,sig);
+}).add;
+);
+
+
+(
+SynthDef("noise", {
+	| freq = 100, t_trig = 1,out = 0, atk = 0, rel = 0.1, amp = 0.6, cutoff = 20000, res = 0.2, hiF = 20000, pan = 0, reverb_out = 1, delay_out = 2, verb = 0, delay = 0 |
+
+	var tone, signal,  ampEnv, pitchEnv, filter, env, noise, sig,modRate,mod,verbSend, delaySend;
+
+	env = EnvGen.kr(Env([1,0],[atk,rel]),     gate: t_trig,doneAction: 2);
+    modRate = LFNoise1.kr(1).exprange(0.02,200);
+	mod = LFNoise1.kr(modRate).exprange(cutoff,20);
+	tone = SinOsc.ar(pitchEnv, mul: env)*amp!2;
+	noise = WhiteNoise.ar(amp)*env;
+	filter = BPF.ar(noise,mod,res);
+	sig = Pan2.ar(filter,pan);
+	verbSend = sig*verb;
+	delaySend = sig*delay;
+	Out.ar(reverb_out, verbSend);
+	Out.ar(delay_out, delaySend);
+	Out.ar(out,sig);
+}).add;
+);
+
+
+(
+SynthDef("kick", {
+	| freq = 40,out = 0, t_trig = 1, atk = 0, rel = 0.3, amp = 0.6, cutoff = 20000, res = 0.2,pEnv=4, hiF = 20000 |
+
+	var signal , ampEnv, pitchEnv, filter, fEnv;
+
+	ampEnv = EnvGen.kr(Env.perc(atk, rel, amp),     gate: t_trig,doneAction: 2);
+
+	pitchEnv = EnvGen.kr(((Env.perc(atk, rel/2)).range(freq, freq*pEnv)),gate: t_trig);
+
+	signal = SinOsc.ar(pitchEnv, mul: ampEnv)!2;
+	fEnv = EnvGen.kr(((Env.perc(atk, rel/4)).range(cutoff, hiF)),gate: t_trig);
+	filter = RLPF.ar(signal, fEnv, res)*amp;
+	Out.ar(out, filter);
+}).add;
+);
+
+)
+)
+
+/////////effects///////
+(
+(
+SynthDef.new("reverb", {
+	arg in=0, out=0, fFreq = 1000, fq = 1, dry = 0.5,roomsize = 10,filter2,amp=0.5;
+	var sig, lpFilter, lfo,revtime,hpFilter,lfo2;
+	sig = In.ar(in, 2);
+	lfo = LFNoise2.ar(0.2).exprange(20,18000);
+	lfo2 = LFNoise2.ar(0.1).exprange(60,300);
+	revtime = LFNoise2.ar(0.2).exprange(3,20);
+	sig = GVerb.ar(sig,roomsize,revtime,dry) * 0.8;
+	lpFilter = RLPF.ar(sig, lfo, fq);
+	hpFilter = RHPF.ar(lpFilter, lfo2, fq)*amp;
+	Out.ar(out, hpFilter);
+}).add;
+);
+
+(
+SynthDef.new("delay", {
+	arg in=0, out=0, delTime=0.3;
+	var sig;
+	sig = In.ar(in, 2);
+	sig = (sig + CombN.ar(sig, 1, delTime, 2)) * 0.2;
+	Out.ar(out, sig);
+}).add;
+);
+(
+Synth.new(\reverb, [\in, ~reverb_bus, \out, 0], ~reverb_grp);
+Synth.new(\delay, [\in, ~delay_bus, \out, 0], ~delay_grp);
+);
+
+)
+
+
+
+
+
+
+
+
+////////////////////////pbinds
+
+
+(
+t = TempoClock(135/60);
+
+///////kick
+~kick1 = Pbindef(\kick1,
+	\instrument, \kick,
+	\freq, Pwhite(40,50),
+	\dur, Prand([Pseq([2,0.25,Rest(0.25),0.5,1],1),Pseq([0.25,2,Rest(0.5),1,0.25],1),Pseq([0.5,1,Rest(0.25),2,0.25],1)],inf),
+	\amp, Pwhite(0.35,0.35),
+	\cutoff, Pwhite(50,100),
+	\hiF, Pwhite(50,1000),
+	\res, Pwhite(0.3,0.8),
+	\outbus,        0,
+	\pEnv, 4,
+    \rel, Pwhite(0.5,0.5),
+    \atk, 0
+
+).play(t);
+
+~kick2 = Pbindef(\kick2,
+	\instrument, \kick,
+	\freq, Pwhite(40,100),
+	\amp, 0.3,
+	\dur, Prand([16],inf),
+	\cutoff, Pwhite(20,15000),
+	\hiF, Pwhite(20,15000),
+	\res, Pwhite(0.3,0.8),
+	\pEnv, 0,
+	\outbus,        0,
+    \rel, Pwhite(5,10),
+    \atk, 0
+
+).play(t);
+
+
+~kick3 = Pbindef(\kick3,
+	\instrument, \kick,
+	[\freq, \dur, \amp], Pfunc({
+
+		var pitch, dur, amp;
+
+		pitch = (30.rand) + 40;
+		if ((pitch < 50), {
+			dur = 1;
+		} , {
+			dur = 0.25;
+		});
+		if ((dur < 0.5), {
+			amp = (0.4.rand)+0.1;
+		} , {
+			amp = 0.5;
+		});
+
+		[pitch, dur, amp]
+	}),
+	\cutoff, Pwhite(50,100),
+	\hiF, Pwhite(50,1000),
+	\res, Pwhite(0.3,0.8),
+	\outbus,        0,
+	\pEnv, 4,
+    \rel, 0.2,
+    \atk, 0
+
+).play(t);
+
+
+
+~kick4 = Pbindef(\kick4,
+	\instrument, \kick,
+	\freq, Pseq([35,75,70,65,50],inf),
+	\amp, Pseq([0.5,0.1,0.2,0.3,0.4],inf),
+	\dur, Pseq([3,0.25,0.25,0.25,0.25],inf),
+	\cutoff, Pwhite(20,15000),
+	\hiF, Pwhite(20,15000),
+	\res, Pwhite(0.3,0.8),
+	\pEnv, 4,
+	\outbus,        0,
+    \rel, Pseq([0.9,0.3,0.3,0.3,0.3],inf),
+    \atk, 0
+
+).play(t);
+
+
+~kick5 = Pbindef(\kick5,
+	\instrument, \kick,
+	\freq, Pseq([30],inf),
+	\amp, 0.5,
+	\dur, Pseq([4],inf),
+	\cutoff, Pwhite(20,15000),
+	\hiF, Pwhite(20,15000),
+	\res, Pwhite(0.3,0.8),
+	\pEnv, 3,
+	\outbus,        0,
+    \rel, Pseq([1],inf),
+    \atk, 0
+
+).play(t);
+
+///////////snare
+
+
+~snare1 = Pbindef(\snare1,
+	\instrument, \snare,
+	\group, ~src_grp,
+	\out, 0,
+	\pan, 0,
+    \delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\verb, Pwhite(0.1,1),
+	\delay, Pwhite(1,1),
+	\atk, 0,
+	\rel, Pwhite(0.05,0.2),
+	\dur, Pn(Prand([Pseq([Rest(2),2],1),Pseq([Rest(0.25),0.25],1),Pseq([Rest(1),1],1),Pseq([Rest(2),2],1)])),
+	\noiseAmp, 0.5,
+	\toneAmp, 0.8,
+	\amp, Pif(Pkey(\dur)<0.5,Prand([0.1,0.2,0.3,0.4],inf),0.5,0.5),
+	\freq, Pwhite(200,300),
+	\mRatio, Pwhite(0,10),
+	\cRatio, Pwhite(0.9,10)
+).play(t,quant:4);
+
+~snare2 = Pbindef(\snare2,
+	\instrument, \snare,
+	\group, ~src_grp,
+	\out, 0,
+    \delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\verb, Pwhite(0.1,1),
+	\delay, Pwhite(1,1),
+	\atk, 0.4,
+	\rel, Pwhite(0.05,0.2),
+	\dur, 4,
+	\noiseAmp, 0.5,
+	\pan, Pwhite(-1,1),
+	\toneAmp, 0.8,
+	\amp, 0.05,
+	\freq, Pwhite(20,13000),
+	\mRatio, Pwhite(0,10),
+	\cRatio, Pwhite(0,10)
+).play(t,quant:4);
+
+~snare3 = Pbindef(\snare3,
+	\instrument, \snare,
+	\group, ~src_grp,
+	\out, 0,
+	\pan, 0,
+    \delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\verb, Pwhite(0.1,1),
+	\delay, Pwhite(1,1),
+	\atk, 0,
+	\rel, Pwhite(0.05,0.2),
+	\dur, Pseq([Rest(3),1],inf),
+	\noiseAmp, 0.5,
+	\toneAmp, 0.8,
+	\amp, 0.4,
+	\freq, Pwhite(200,300),
+	\mRatio, Pwhite(0,10),
+	\cRatio, Pwhite(0.9,10)
+).play(t);
+
+
+//////hat
+
+
+~hat1 = Pbindef(\hat1,
+	\instrument, \hat,
+	\dur, Pseq([0.5,0.25,0.25,0.5],inf),
+	\amp, Pwhite(0.2,0.5),
+	\atk, Pwhite(0.0,0.0),
+	\rel, Pwhite(0.01,0.05),
+    \pan, Pwhite(0,0),
+	\cutoff, Pwhite(20,20000),
+	\res, Pwhite(0.1,1)
+).play(t);
+
+
+~hat2 = Pbindef(\hat2,
+	\instrument, \hat,
+	\dur, Pseq([1,2],inf),
+	\amp, Pwhite(0.1,0.2),
+	\atk, Pwhite(0.0,0.1),
+	\rel, Pwhite(0.01,1),
+    \pan, Pwhite(-1,1),
+	\cutoff, Pwhite(20,1000),
+	\res, Pwhite(0.1,1)
+).play(t);
+
+~hat3 = Pbindef(\hat3,
+	\instrument, \hat,
+	\dur, 0.25,
+	\amp, Pwhite(0.2,0.5),
+	\atk, Pwhite(0.0,0.0),
+	\rel, Pwhite(0.01,0.05),
+    \pan, Pwhite(-0.5,0.5),
+	\cutoff, Pwhite(20,20000),
+	\res, Pwhite(0.1,1)
+).play(t);
+
+
+~hat4 = Pbindef(\hat4,
+	\instrument, \hat,
+	\dur, 16,
+	\amp, Pwhite(0.2,0.5),
+	\atk, Pwhite(1.0,6),
+	\rel, Pwhite(1.0,6),
+    \pan, Pwhite(-1,1),
+	\cutoff, Pwhite(20,500),
+	\res, Pwhite(0.1,1)
+).play(t);
+
+///////noise
+
+~noise1 = Pbindef(\noise1,
+	\instrument, \noise,
+	\out, 0,
+    \delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\verb, Pwhite(0,1.0),
+	\delay, Pwhite(0,1.0),
+	\dur, Pseq([1],inf),
+	\amp, Pwhite(0.1,0.3),
+	\atk, Pwhite(0.1,0.1),
+	\rel, Pwhite(0.01,0.2),
+    \pan, Pwhite(-1,1),
+	\cutoff, Pwhite(100,20000),
+	\res, Pwhite(0.1,1)
+).play(t);
+
+~noise2 = Pbindef(\noise2,
+	\instrument, \noise,
+	\out, 0,
+    \delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\verb, Pwhite(0,1.0),
+	\delay, Pwhite(0,1.0),
+	\dur, Prand([1/3*4,1/3*2]*4,inf),
+	\amp, Pwhite(0.1,0.1),
+	\atk, Pwhite(0.1,1),
+	\rel, Pwhite(0.01,1),
+    \pan, Pwhite(-1,1),
+	\cutoff, Pwhite(50,20000),
+	\res, Pwhite(0.1,1)
+).play(t);
+
+~noise3 = Pbindef(\noise3,
+	\instrument, \noise,
+	\out, 0,
+    \delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\verb, Pwhite(0,1.0),
+	\delay, Pwhite(0,1.0),
+	\dur, Pseq([Rest(1),1],inf),
+	\amp, Pwhite(0.5,0.5),
+	\atk, Pwhite(0.2,0.2),
+	\rel, Pwhite(0.1,0.5),
+    \pan, Pwhite(0,0),
+	\cutoff, Pwhite(10000,1000),
+	\res, Pwhite(1,1)
+).play(t);
+
+~noise4 = Pbindef(\noise4,
+	\instrument, \noise,
+	\out, 0,
+    \delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\verb, Pwhite(0,1.0),
+	\delay, Pwhite(0,1.0),
+	\dur, 4,
+	\amp, Pwhite(0.1,0.3),
+	\atk, Pwhite(0.1,0.5),
+	\rel, Pwhite(0.5,0.5),
+    \pan, Pwhite(-1,1),
+	\cutoff, Pwhite(15000,20000),
+	\res, Pwhite(0.1,0.5)
+).play(t);
+
+
+/////bass
+
+~bass1 = Pbindef(\bass1,
+	\instrument, \fm,
+	\freq, Pwhite(20,60,inf),
+	\outbus,        0,
+	\pos, 0,
+    \rel, 0.1,
+	\iScale, 2,
+	\index, 0.7,
+    \atk, 0.1,
+	\dur, Prand([0.5,1],inf),
+    \mRatio, 2,
+     \cRatio, 3,
+     \amp, 0.2
+
+).play(t);
+
+~bass2 = Pbindef(\bass2,
+	\instrument, \fm,
+	\freq, Pwhite(2000,6000,inf),
+	\outbus,        0,
+    \rel, 0.3,
+	\pos, Pwhite(-1,1),
+	\iScale, Pwhite(1,3),
+	\index, Pwhite(0.0,0.7),
+    \atk, 0,
+	\dur, Pwhite(0.0001,1),
+	\mRatio, Pwhite(1,10),
+     \cRatio, Pwhite(1,10),
+     \amp, 0.01
+
+).play(t);
+
+~bass3 = Pbindef(\bass3,
+	\instrument, \fm,
+	\freq, Pwhite(50,100,inf),
+	\outbus,        0,
+	\pos, Pwhite(0,1),
+    \rel, 0.3,
+	\iScale, 2.2,
+	\index, 1.2,
+    \atk, 0,
+	\dur, Prand([0.5,1],inf),
+    \mRatio, 2,
+     \cRatio, 3,
+     \amp, 0.03
+
+).play(t);
+
+~bass4 = Pbindef(\bass4,
+	\instrument, \fm,
+	\freq, Prand([
+		Pseries(40,-1,16),
+		Pseries(30,1,12),
+		Pseries(50,-2,14),
+		Pseries(50,-1,8),
+		Pseries(30,5,12),
+		Pseries(60,-1,6),
+		Pseries(50,1,16),
+		Pseries(40,1,32),
+		Pseries(30,5,8)
+	],inf),
+	\outbus,        0,
+	\pos, 0,
+    \rel, 0.5,
+	\iScale, 3,
+	\index, 1,
+    \atk, 0,
+	\dur, Prand([0.5,1],inf),
+    \mRatio, 1,
+     \cRatio, 3,
+     \amp, 0.1
+
+).play(t);
+
+~bass5 = Pbindef(\bass5,
+	\instrument, \fm,
+	\freq, Pwhite(1,100,inf),
+	\outbus,        0,
+	\pos, 0,
+    \rel, 2,
+	\iScale, Pwhite(0.01,0.1),
+	\index, Pwhite(1,20),
+    \atk, 5,
+	\dur, 10,
+    \mRatio, Pwhite(1,50),
+     \cRatio, 1,
+     \amp, 0.01
+
+).play(t);
+
+
+///acid
+
+~acid1 = Pbindef(\acid1,
+	\instrument, \chord,
+	\out, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\amp, 0.1,
+	\verb, Pwhite(0,0.5),
+	\pos, Pwhite(-1,1),
+	\fRel, Pwhite(0,0.1),
+	\rel, Pwhite(0.01,0.1),
+	\width, Pwhite(0.01,1.0),
+	\freq, Pwhite(40,200,inf),
+	\dur, Prand([0.5],inf)
+).play(t);
+
+~acid2 = Pbindef(\acid2,
+	\instrument, \chord,
+	\out, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\amp, 0.01,
+	\verb, Pwhite(0.2,0.5),
+	\pos, Pwhite(-1,1),
+	\fRel, Pwhite(0,0.01),
+	\rel, Pwhite(0.1,1),
+
+	\attack, Pwhite(0.0,0.3),
+	\width, Pwhite(0.01,1.0),
+	\freq, Prand([Pwhite(50,150,1),Pwhite(151,25,1),Pwhite(251,350,1),Pwhite(351,450,1),Pwhite(551,650,1),Pwhite(751,850,1),Pwhite(951,1050,1),Pwhite(1051,1150,1),Pwhite(1051,1150,1)],inf),
+	\dur, Prand([Pseq([0.5,0.25,1],1),Pseq([0.25,0.5,1],1),Pseq([1,2,1],1)],inf)
+).play(t);
+
+
+~acid3 = Pbindef(\acid3,
+	\instrument, \chord,
+	\out, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\amp, 0.2,
+	\verb, Pwhite(0.0,0.0),
+	\pos, Pwhite(0,0),
+	\fRel, Pwhite(0.1,0.1),
+	\rel, Pwhite(0.2,0.2),
+	\attack, Pwhite(0.0,0.0),
+	\width, Pwhite(0.1,0.1),
+	\midinote, Prand([
+		Pseries(32,1,10),
+		Pseries(20,1,10),
+		Pseries(43,-1,10),
+		Pseries(44,-0.5,10),
+		Pseries(25,1,10),
+	],inf),
+	\dur, Prand([0.25,Rest(0.25),0.5],inf),
+).play(t);
+
+
+~acid4 = Pbindef(\acid4,
+	\instrument, \chord,
+	\out, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\amp, Pwhite(0.01,0.1),
+	\verb, Pwhite(0.0,0.0),
+	\pos, Pwhite(-0.5,0.5),
+	\fRel, Pwhite(0.01,0.01),
+	\rel, Pwhite(0.10,0.3),
+	\attack, Pwhite(0.0,0.0),
+	\width, Pwhite(0.01,0.9),
+	\midinote, Prand([
+		Pseries(62,1,10),
+		Pseries(60,1,10),
+		Pseries(63,-1,10),
+		Pseries(64,-0.5,10),
+		Pseries(65,1,10),
+	],inf),
+	\dur, Prand([0.25,Rest(0.25),0.25],inf),
+).play(t);
+
+
+//samples
+
+~samples1 = Pbindef(\samples1,
+	\instrument, \playbuf,
+	\bufnum,     Pwhite(1,1),
+	\dur,        Prand([4],inf),
+	\rate,       Pwhite(0,0.9,inf),
+	\startPos,   Pwhite(0.0 , 1),
+	\sustain,    Pwhite(0.01,0.1),
+	\pan,        Pwhite(-1,1),
+	\attack,     Pwhite(0,0.01),
+	\verb,      Pwhite(0,1),
+	\amp,        Pwhite(0.2,0.6),
+	\delay, 1,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\outbus,        0,
+	\rel,    Pwhite(0.1,2)
+).play(t);
+
+
+~samples2 = Pbindef(\samples2,
+	\instrument, \playbuf,
+	\bufnum,     Pwhite(0,4),
+	\dur,        Prand([0.25],inf),
+	\rate,       Pwhite(-10,10,inf),
+	\startPos,   Pwhite(0.0 , 1),
+	\sustain,    Pwhite(0.01,0.1),
+	\pan,        Pwhite(-1,1),
+	\attack,     Pwhite(0,1),
+	\verb,      Pwhite(0,0),
+	\amp,        Pwhite(0.2,0.4),
+	\delay, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\outbus,        0,
+	\rel,    Pwhite(0.01,0.2)
+).play(t);
+
+
+~samples3 = Pbindef(\samples3,
+	\instrument, \playbuf,
+	\bufnum,     1,
+	\dur,        Prand([1/8],inf),
+	\rate,       Prand([
+		Pseries(0.1,0.1,64),
+		Pseries(1,0.1,64),
+		Pseries(5,-0.1,64),
+		Pseries(0.01,0.01,64),
+		Pseq([0.01,0.05,0.1,0.02],4),
+		Pseq([1,-0.5,-5,2],4)
+		],inf),
+	\startPos,  Pwhite(0.00,1.00),
+	\fFreq,      18000,
+	\sustain,    Pwhite(0.05,0.1),
+	\pan,        Pwhite(-1,1),
+	\attack,     Pwhite(0,0),
+	\verb,      Pwhite(0,0.5),
+	\amp,        Pwhite(0.4,0.4),
+	\delay, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\outbus,        0,
+	\rel,    Pwhite(0.01,0.02)
+).play(t);
+
+
+////samples_dry
+
+~samples_dry1 = Pbindef(\samples_dry1,
+	\instrument, \playbuf2,
+	\bufnum,     0,
+	\dur,        Pwhite(8,16),
+	\rate,       Pwhite(0.1,1),
+	\startPos,  Pwhite(0.00,1.00),
+	\sustain,    Pwhite(0.05,0.1),
+	\spread, 0,
+	\lfoMin, Pwhite(0.01,2),
+	\lfoMax, Pwhite(0.01,2),
+	\rateMax, Pwhite(0.01,2),
+	\rateMax, Pwhite(0.01,2),
+	\pan,        Pwhite(-1,1),
+	\attack,     Pwhite(1,8),
+	\verb,      Pwhite(0,0.5),
+	\amp,        Pwhite(0.1,0.4),
+	\delay, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\outbus,        0,
+	\rel,    Pwhite(1,8)
+).play(t);
+
+~samples_dry2 = Pbindef(\samples_dry2,
+	\instrument, \playbuf2,
+	\bufnum,     Pwhite(1,5),
+	\dur,        Pwhite(0.1,1,inf),
+	\rate,       Pwhite(-1.001,1.00),
+	\startPos,  Pwhite(0.00,1.00),
+	\sustain,    Pwhite(0.001,0.002),
+	\spread, 0,
+	\lfoMin, Pwhite(0.01,2),
+	\lfoMax, Pwhite(0.01,2),
+	\rateMax, Pwhite(0.01,2),
+	\rateMax, Pwhite(0.01,2),
+	\pan,        Pwhite(-1,1),
+	\attack,     Pwhite(0,0.001),
+	\verb,      Pwhite(0,0.5),
+	\amp,        Pwhite(0.1,0.4),
+	\delay, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\outbus,        0,
+	\rel,    Pwhite(0.0002,0.008)
+).play(t);
+
+~samples_dry3 = Pbindef(\samples_dry3,
+	\instrument, \playbuf2,
+	\bufnum,     2,
+	\dur,        Pwhite(8,16,inf),
+	\rate,       Pwhite(-5,5),
+	\startPos,  Pwhite(0.00,1.00),
+	\sustain,    Pwhite(0.1,0.2),
+	\spread, 10,
+	\lfoMin, Pwhite(5,2),
+	\lfoMax, Pwhite(2,2),
+	\rateMax, Pwhite(-5,5),
+	\rateMax, Pwhite(-5,5),
+	\pan,        Pwhite(-0.5,0.5),
+	\attack,     Pwhite(1,4),
+	\verb,      Pwhite(0,0.1),
+	\amp,        Pwhite(0.1,0.2),
+	\delay, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\outbus,        0,
+	\rel,    Pwhite(0.02,0.02)
+).play(t);
+
+////rest
+
+~rest = Pbindef(\rest,
+	\instrument, \playbuf2,
+	\bufnum,     2,
+	\dur,        Pwhite(8,16,inf),
+	\rate,       Pwhite(-5,5),
+	\startPos,  Pwhite(0.00,1.00),
+	\sustain,    Pwhite(0.1,0.2),
+	\spread, 10,
+	\lfoMin, Pwhite(5,2),
+	\lfoMax, Pwhite(2,2),
+	\rateMax, Pwhite(-5,5),
+	\rateMax, Pwhite(-5,5),
+	\pan,        Pwhite(-0.5,0.5),
+	\attack,     Pwhite(1,4),
+	\verb,      Pwhite(0,0.0),
+	\amp,        Pwhite(0,0),
+	\delay, 0,
+	\delay_out, ~delay_bus,
+	\reverb_out, ~reverb_bus,
+	\outbus,        0,
+	\rel,    Pwhite(0.02,0.02)
+).play(t);
+
+
+(
+~kick1.stop;
+~bass1.stop;
+~acid1.stop;
+~snare1.stop;
+~noise1.stop;
+~samples1.stop;
+~hat1.stop;
+~bass5.stop;
+~kick2.stop;
+~bass2.stop;
+~acid2.stop;
+~snare2.stop;
+~noise2.stop;
+~samples2.stop;
+~hat2.stop;
+~noise4.stop;
+~hat4.stop;
+~kick3.stop;
+~bass3.stop;
+~acid3.stop;
+~acid4.stop;
+~snare3.stop;
+~noise3.stop;
+~samples3.stop;
+~hat3.stop;
+~bass4.stop;
+~kick4.stop;
+~kick5.stop;
+~rest.stop;
+~samples_dry1.stop;
+~samples_dry2.stop;
+~samples_dry3.stop;
+);
+)
+
+
+
+
+
+////composition
+
+(
+a = 32;
+
+
+////kick
+(
+~kick_master = Pn(
+	Psync( ~kick2,4,a) ++
+	Psync( ~kick5,4,a) ++
+	Psync(~kick5,4,a)  ++
+    Psync( ~kick5,4,a) ++
+	Psync( ~kick5,4,a*4) ++
+	Psync( ~rest,4,8) ++
+	//part2
+	Psync( ~kick1,4,a*4) ++
+	Psync(Prand([~kick1,~kick3,~kick5],1),4,a) ++
+	Psync(Prand([~kick1,~kick3,~kick5],1),4,a) ++
+	Psync(Prand([~kick1,~kick3,~kick5],1),4,a) ++
+	Psync(Prand([~kick1,~kick3,~kick5],1),4,a) ++
+	Psync(Prand([~kick1,~kick3,~kick5],1),4,a) ++
+	Psync(Prand([~kick1,~kick3,~kick5],1),4,a) ++
+	Psync(Prand([~kick1,~kick3,~kick5],1),4,a) ++
+	Psync(Prand([~kick1,~kick3,~kick5],1),4,a) ++
+	Psync( ~rest,4,4) ++
+	//dub
+	Psync( ~kick4,4,a*2) ++
+	Psync( ~kick4,4,a*2) ++
+	Psync( ~kick5,4,a*2) ++
+	Psync( ~kick5,4,a*2) ++
+	//end
+    Psync( ~kick5,4,a*4) ++
+    Psync( ~rest,4,a*4)
+
+).play(t);
+);
+
+
+/////snare
+(
+
+~snare_master = Pn(
+	Psync( ~snare2,4,a) ++
+	Psync( ~snare2,4,a) ++
+	Psync( ~snare3,4,a-1) ++
+	Psync( ~rest,4,1) ++
+	Psync( ~snare3,4,a) ++
+	Psync( ~snare3,4,a*4) ++
+	Psync( ~rest,4,8) ++
+	//part2
+	Psync( ~snare1,4,a*4) ++
+	Psync( Prand([~snare1,~snare3],2),4,a) ++
+	Psync( Prand([~snare1,~snare2,~snare3],2),4,a) ++
+	Psync( Prand([~snare1,~snare2,~snare3],2),4,a) ++
+	Psync( Prand([~snare1,~snare2,~snare3],2),4,a) ++
+	Psync( Prand([~snare1,~snare2,~snare3],2),4,a) ++
+	Psync( Prand([~snare1,~snare2,~snare3],2),4,a) ++
+	Psync( Prand([~snare1,~snare2,~snare3],2),4,a) ++
+	Psync( Prand([~snare1,~snare2,~snare3],2),4,a) ++
+	Psync( ~snare2,4,4) ++
+	//dub
+	Psync( ~snare3,4,a*2) ++
+	Psync( ~snare3,4,a*2) ++
+	Psync( ~snare3,4,a*2) ++
+	Psync( ~snare2,4,a*2) ++
+  	//end
+    Psync( ~snare2,4,a*4) ++
+    Psync( ~snare2,4,a*4)
+
+).play(t);
+
+);
+
+
+//////hat
+(
+
+~hat_master = Pn(
+	Psync( ~rest,4,a) ++
+	Psync( ~hat2,4,a) ++
+	Psync( ~hat2,4,a) ++
+	Psync(~hat2,4,a) ++
+	Psync(~hat2,4,a*4) ++
+	Psync(~rest,4,8) ++
+	//part2
+	Psync(~hat1,4,a*4) ++
+	Psync(~hat3,4,a*4) ++
+	Psync(Prand([~hat3,~hat1,~hat2],1),4,a) ++
+	Psync(Prand([~hat3,~hat1,~hat2],1),4,a) ++
+	Psync(Prand([~hat3,~hat1,~hat2],1),4,a) ++
+	Psync(Prand([~hat3,~hat1,~hat2],1),4,a) ++
+	Psync( ~rest,4,4) ++
+	//dub
+    Psync(~hat2,4,a*2) ++
+	Psync(~hat2,4,a*2) ++
+	Psync(~hat2,4,a*2) ++
+	Psync(~hat2,4,a*2) ++
+	//ending
+    Psync(~hat4,4,a*4) ++
+    Psync(~hat4,4,a*4)
+
+).play(t);
+);
+
+
+
+////noise
+(
+~noise_master = Pn(
+	Psync( ~noise2,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync(~rest,4,a)  ++
+	Psync(~noise2,4,) ++
+	Psync(Prand([~noise2,~noise1,~noise3],1),4,a)++
+	Psync(Prand([~noise2,~noise1,~noise3],1),4,a)++
+	Psync(Prand([~noise2,~noise1,~noise3],1),4,a)++
+	Psync(Prand([~noise2,~noise1,~noise3],1),4,a)++
+	Psync(~noise2,4,8)  ++
+	//part2
+	Psync(~noise3,4,a*4) ++
+	Psync(~noise3,4,a*4) ++
+	Psync(Prand([~noise2,~noise1,~noise3],1),4,a)++
+	Psync(Prand([~noise2,~noise1,~noise3],1),4,a)++
+	Psync(Prand([~noise2,~noise1,~noise3],1),4,a)++
+	Psync(Prand([~noise2,~noise1,~noise3],1),4,a) ++
+	Psync( ~rest,4,4) ++
+	//dub
+	Psync(~noise2,4,a*2) ++
+	Psync(~noise2,4,a*2) ++
+	Psync(~noise2,4,a*2) ++
+	Psync(~noise2,4,a*2) ++
+	//ending
+    Psync(~noise4,4,a*4) ++
+    Psync(~noise4,4,a*4)
+
+
+).play(t);
+);
+
+
+
+
+///////bass
+(
+~bass_master = Pn(
+	//intro
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync(~rest,4,a) ++
+	Psync(~bass1,4,a) ++
+	Psync(~bass1,4,a*4) ++
+	Psync(~rest,4,8) ++
+	//part2
+	Psync(~bass3,4,a*4) ++
+	Psync(~bass4,4,a*4) ++
+	Psync(Prand([~bass4,~bass3,~bass1],1),4,a) ++
+	Psync(Prand([~bass4,~bass3,~bass1],1),4,a) ++
+	Psync(Prand([~bass4,~bass3,~bass1],1),4,a) ++
+	Psync(Prand([~bass4,~bass3,~bass1],1),4,a) ++
+	Psync( ~bass2,4,4) ++
+	//dub
+	Psync(~bass1,4,a*2) ++
+	Psync(~bass1,4,a*2) ++
+    Psync(~bass1,4,a*2) ++
+	Psync(~bass5,4,a*2) ++
+	//end
+   Psync(~bass5,4,a*4) ++
+   Psync(~bass5,4,a*2) ++
+   Psync(~rest,4,a*2)
+
+).play(t);
+);
+
+
+//////acid
+(
+~acid_master = Pn(
+	Psync( ~acid2,4,a) ++
+	Psync( ~acid2,4,a) ++
+	Psync(~acid2,4,a) ++
+	Psync(~acid2,4,a) ++
+	Psync(~acid1,4,a*4) ++
+	Psync(~rest,4,8) ++
+	//part2
+	Psync(~acid2,4,a*4) ++
+	Psync(~acid4,4,a*4) ++
+	Psync(Prand([~acid1,~acid2,~acid3,~acid4],1),4,a) ++
+	Psync(Prand([~acid1,~acid2,~acid3,~acid4],1),4,a) ++
+	Psync(Prand([~acid1,~acid2,~acid3,~acid4],1),4,a) ++
+	Psync(Prand([~acid1,~acid2,~acid3,~acid4],1),4,a) ++
+	Psync(~acid2,4,4) ++
+	//dub
+	Psync(~rest,4,a*2) ++
+	Psync(Prand([~acid1,~acid2,~acid3,~acid4],1),4,a) ++
+	Psync(Prand([~acid1,~acid2,~acid3,~acid4],1),4,a) ++
+	Psync(Prand([~acid1,~acid2,~acid3,~acid4],1),4,a) ++
+	Psync(Prand([~acid1,~acid2,~acid3,~acid4],1),4,a) ++
+	Psync( ~rest,4,a*2) ++
+	//end
+    Psync( ~acid2,4,a*4) ++
+	Psync( ~acid2,4,a*2) ++
+    Psync( ~rest,4,a*2)
+
+).play(t);
+);
+
+//////samples
+(
+~samples_master = Pn(
+	Psync( ~samples2,4,a) ++
+	Psync( ~samples2,4,a) ++
+	Psync( ~samples2,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync(Prand([~samples1,~samples2,~samples3,~rest],1),4,a) ++
+	Psync(Prand([~samples1,~samples2,~samples3,~rest],1),4,a) ++
+	Psync(Prand([~samples1,~samples2,~samples3,~rest],1),4,a) ++
+	Psync(Prand([~samples1,~samples2,~samples3,~rest],1),4,a) ++
+	Psync( ~samples3,4,8) ++
+	//part2
+	Psync( ~samples3,4,a*4) ++
+	Psync( ~rest,4,a*4) ++
+	Psync( ~samples1,4,a*4) ++
+	Psync( ~rest,4,4) ++
+	//dub
+	Psync( ~rest,4,a*2) ++
+	Psync( ~samples3,4,a*2) ++
+    Psync( ~samples3,4,a*2) ++
+	Psync( ~samples3,4,a*2) ++
+	//end
+   Psync( ~samples3,4,a*4) ++
+   Psync( ~samples3,4,a*2) ++
+   Psync( ~rest,4,a*2)
+
+).play(t);
+);
+
+
+/////samples_Dry
+(
+~samples_dry_master = Pn(
+	//intro
+	Psync( ~samples_dry1,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a*4) ++
+	Psync(~samples_dry3,4,8) ++
+	//part2
+	Psync( ~samples_dry3,4,a*4) ++
+	Psync( ~samples_dry2,4,a*4) ++
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,4) ++
+	//dub
+	Psync( ~rest,4,a*2) ++
+	Psync( ~rest,4,a*2) ++
+	Psync( ~samples_dry3,4,a*2)++
+	Psync(~samples_dry3,4,a*2)++
+ 	//end
+    Psync(~samples_dry3,4,a*4) ++
+    Psync(~samples_dry3,4,a*4)
+
+).play(t);
+);
+
+
+//////extra
+(
+~ending1 = Pn(
+	//intro
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a*4) ++
+	Psync(~rest,4,8) ++
+	//part2
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,4) ++
+	//dub
+	Psync( ~rest,4,a*2) ++
+	Psync( ~rest,4,a*2) ++
+	Psync( ~rest,4,a*2)++
+	Psync(~samples_dry1 ,4,a*2) ++
+	//end
+    Psync(~samples_dry1 ,4,a*4) ++
+	Psync(~samples_dry1 ,4,a*4)
+
+
+).play(t);
+);
+
+(
+~ending2 = Pn(
+	//intro
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a*4) ++
+	Psync(~rest,4,8) ++
+	//part2
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,4) ++
+	//dub
+	Psync( ~rest,4,a*2) ++
+	Psync( ~rest,4,a*2) ++
+	Psync( ~rest,4,a*2)++
+	Psync(~samples_dry2 ,4,a*2) ++
+	//end
+    Psync(~samples_dry2 ,4,a*4) ++
+    Psync(~samples_dry2 ,4,a*4)
+
+
+).play(t);
+);
+
+(
+~ending3 = Pn(
+	//intro
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a) ++
+	Psync( ~rest,4,a*4) ++
+	Psync(~rest,4,8) ++
+	//part2
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,a*4) ++
+	Psync( ~rest,4,4) ++
+	//dub
+	Psync( ~rest,4,a*2) ++
+	Psync( ~rest,4,a*2) ++
+	Psync( ~rest,4,a*2)++
+	Psync(~bass2,4,a*2) ++
+	//end
+    Psync(~bass2,4,a*4) ++
+    Psync(~bass2,4,a*4)
+
+).play(t);
+);
+
+
+(
+//~kick_master.stop;
+//~snare_master.stop;
+//~hat_master.stop;
+//~noise_master.stop;
+//~bass_master.stop;
+//~acid_master.stop;
+//~samples_master.stop;
+//~samples_dry_master.stop;
+)
+
+)
+
+(
+~kick_master.stop;
+~snare_master.stop;
+~hat_master.stop;
+~noise_master.stop;
+~bass_master.stop;
+~acid_master.stop;
+~samples_master.stop;
+~samples_dry_master.stop;
+~ending1.stop;
+~ending2.stop;
+~ending3.stop;
+)
+
+
+s.record("/Applications/SuperCollider/sounds/ver2orlygur.aiff", 0, 2);
+s.stopRecording;
+
+
